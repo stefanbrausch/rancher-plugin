@@ -85,9 +85,9 @@ public class RancherBuilder extends Builder implements SimpleBuildStep {
 
         Optional<Service> serviceInstance = services.get().getData().stream().filter(service1 -> service1.getName().equals(serviceField.getServiceName())).findAny();
         if (serviceInstance.isPresent()) {
-            upgradeService(serviceInstance.get(), dockerUUID, listener);
+            upgradeService(serviceInstance.get(), dockerUUID, build, listener);
         } else {
-            createService(stack, serviceField.getServiceName(), dockerUUID, listener);
+            createService(stack, serviceField.getServiceName(), dockerUUID, build, listener);
         }
 
     }
@@ -109,7 +109,7 @@ public class RancherBuilder extends Builder implements SimpleBuildStep {
         }
     }
 
-    private void upgradeService(Service service, String dockerUUID, TaskListener listener) throws IOException {
+    private void upgradeService(Service service, String dockerUUID, Run<?, ?> build, TaskListener listener) throws IOException {
         listener.getLogger().println("Upgrading service instance");
         checkServiceState(service, listener);
         ServiceUpgrade serviceUpgrade = new ServiceUpgrade();
@@ -117,7 +117,7 @@ public class RancherBuilder extends Builder implements SimpleBuildStep {
 
         LaunchConfig launchConfig = service.getLaunchConfig();
         launchConfig.setImageUuid(dockerUUID);
-        launchConfig.getEnvironment().putAll(this.customEnvironments());
+        launchConfig.getEnvironment().putAll(this.customEnvironments(build, listener));
 
         if (!Strings.isNullOrEmpty(ports)) {
             launchConfig.setPorts(Arrays.asList(ports.split(",")));
@@ -141,13 +141,13 @@ public class RancherBuilder extends Builder implements SimpleBuildStep {
         waitUntilServiceStateIs(serviceInstance.get().getId(), ACTIVE, listener);
     }
 
-    private void createService(Stack stack, String serviceName, String dockerUUID, TaskListener listener) throws IOException {
+    private void createService(Stack stack, String serviceName, String dockerUUID, Run<?, ?> build, TaskListener listener) throws IOException {
         listener.getLogger().println("Creating service instance");
         Service service = new Service();
         service.setName(serviceName);
         LaunchConfig launchConfig = new LaunchConfig();
         launchConfig.setImageUuid(dockerUUID);
-        launchConfig.setEnvironment(this.customEnvironments());
+        launchConfig.setEnvironment(this.customEnvironments(build, listener));
         if (!Strings.isNullOrEmpty(ports)) {
             launchConfig.setPorts(Arrays.asList(ports.split(",")));
         }
@@ -210,16 +210,36 @@ public class RancherBuilder extends Builder implements SimpleBuildStep {
         }
     }
 
-    private Map<String, Object> customEnvironments() {
+    private Map<String, Object> customEnvironments(Run<?, ?> build, TaskListener listener) {
         HashMap<String, Object> map = new HashMap<>();
         String[] fragments = this.environments.split(",");
         for (String fragement : fragments) {
             if (fragement.contains(":")) {
                 String[] env = fragement.split(":");
-                map.put(env[0], env[1]);
+                String value = env[1];
+                
+                // Catch environment variables if value starts with dollar sign.
+                if(value.startsWith("$")) {
+                	value = getValueOfEnvironmentVariable(value, build, listener);
+                }
+                
+                map.put(env[0], value);
             }
         }
         return map;
+    }
+    
+    private String getValueOfEnvironmentVariable(String value, Run<?, ?> build, TaskListener listener) {
+        try {
+        	EnvVars environment = build.getEnvironment(listener);
+        	String envVarWithoutDollar = value.replaceAll("\\$", "");
+        	if(environment.containsKey(envVarWithoutDollar)) {
+        		value = environment.get(envVarWithoutDollar);
+        	}
+        }catch(InterruptedException | IOException e) {
+        	listener.getLogger().println(e.getMessage());
+        }
+        return value;
     }
 
     private boolean isEqual(ServiceField serviceField, Stack stack1) {
