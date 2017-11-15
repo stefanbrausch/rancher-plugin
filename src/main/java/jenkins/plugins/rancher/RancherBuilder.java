@@ -297,9 +297,9 @@ public class RancherBuilder extends Builder implements SimpleBuildStep {
         }
 
         public ListBoxModel doFillCredentialIdItems() {
-            if (!Jenkins.getInstance().hasPermission(Jenkins.ADMINISTER)) {
-                return new ListBoxModel();
-            }
+            //if (!Jenkins.getInstance().hasPermission(Jenkins.ADMINISTER)) {
+            //    return new ListBoxModel();
+            //}
             List<StandardUsernamePasswordCredentials> credentials = CredentialsUtil.getCredentials();
             return new StandardUsernameListBoxModel()
                     .withEmptySelection()
