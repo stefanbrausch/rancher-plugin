@@ -233,6 +233,8 @@ public class RancherBuilder extends Builder implements SimpleBuildStep {
         try {
         	EnvVars environment = build.getEnvironment(listener);
         	String envVarWithoutDollar = value.replaceAll("\\$", "");
+        	envVarWithoutDollar = envVarWithoutDollar.replaceAll("\\{", "");
+        	envVarWithoutDollar = envVarWithoutDollar.replaceAll("\\}", "");
         	if(environment.containsKey(envVarWithoutDollar)) {
         		value = environment.get(envVarWithoutDollar);
         	}
